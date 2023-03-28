@@ -49,18 +49,34 @@ apiVersion: v1
 kind: Service
 metadata:
   name: sprayproxy-service
+  namespace: sprayproxy
 spec:
   selector:
-    app: sprayproxy
+    app.kubernetes.io/name: sprayproxy
   ports:
     - name: server
       protocol: TCP
       port: 8080
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sprayproxy-metrics-service
+  namespace: sprayproxy
+spec:
+  selector:
+    app.kubernetes.io/name: sprayproxy
+  ports:
+    - name: https
+      protocol: TCP
+      port: 8443
+      targetPort: https
+---
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: sprayproxy-route
+  namespace: sprayproxy
 spec:
   tls:
     termination: edge
