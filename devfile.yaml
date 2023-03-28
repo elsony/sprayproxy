@@ -1,57 +1,69 @@
-schemaVersion: 2.2.0
+kind: Deployment
+apiVersion: apps/v1
 metadata:
   name: sprayproxy
-  displayName: "Spray proxy"
-  description: 'This is Pritis sprayprxy'
-  icon: https://raw.githubusercontent.com/devfile-samples/devfile-stack-icons/main/golang.svg
-  language: Go
-  projectType: Go
-  tags:
-    - Go
-  version: 1.1.0
-  provider: Red Hat
-  supportUrl: https://github.com/devfile-samples/devfile-support#support-information
-  # attributes:
-  #   alpha.dockerimage-port: 8081
-parent:
-  id: go
-  registryUrl: 'https://registry.devfile.io'
-components:
-  - name: image-build
-    image:
-      imageName: rhopp-sprayproxy:latest
-      dockerfile:
-        uri: Dockerfile
-        buildContext: .
-        rootRequired: false
-  - name: kubernetes-deploy
-    attributes:
-      deployment/replicas: 1
-      deployment/cpuLimit: '100m'
-      deployment/cpuRequest: 10m
-      deployment/memoryLimit: 100Mi
-      deployment/memoryRequest: 10Mi
-      deployment/container-port: 8080
-    kubernetes:
-      uri: deploy.yaml
-      endpoints:
-      - name: https
-        targetPort: 8443
-        path: /
-# commands:
-#   - id: build-image
-commands:
-  - id: build-image
-    apply:
-      component: image-build
-  - id: deployk8s
-    apply:
-      component: kubernetes-deploy
-  - id: deploy
-    composite:
-      commands:
-        - build-image
-        - deployk8s
-      group:
-        kind: deploy
-        isDefault: true
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sprayproxy
+  template:
+    metadata:
+      labels:
+        app: sprayproxy
+    spec:
+      containers:
+        - name: sprayproxy
+          image: ko://github.com/redhat-appstudio/sprayproxy
+          args:
+            - server
+          env:
+            - name: SPRAYPROXY_SERVER_BACKEND
+          ports:
+            - containerPort: 8080
+              name: server
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+        - name: kube-rbac-proxy
+          image: registry.redhat.io/openshift4/ose-kube-rbac-proxy:v4.12
+          args:
+            - "--secure-listen-address=0.0.0.0:8443"
+            - "--upstream=http://127.0.0.1:6000/"
+            - "--logtostderr=true"
+            - "--v=0"
+          ports:
+            - containerPort: 8443
+              protocol: TCP
+              name: https
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 5m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sprayproxy-service
+spec:
+  selector:
+    app: sprayproxy
+  ports:
+    - name: server
+      protocol: TCP
+      port: 8080
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: sprayproxy-route
+spec:
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: sprayproxy-service
